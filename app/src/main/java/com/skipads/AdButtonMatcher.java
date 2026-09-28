@@ -20,6 +20,18 @@ final class AdButtonMatcher {
     /** 文字中包含這些字就算。 */
     private static final List<String> CONTAINS = Arrays.asList("加速");
 
+    /**
+     * 加速 / 快轉符號，例如 »、››、>>、＞＞、►｜、▶▶|、⏩、⏭（去掉空白後整段比對）。
+     * 單一個 >、›、►、▶ 常是一般的「下一頁 / 播放」，所以至少要兩個箭頭，或箭頭後接直線；
+     * 本身就是雙箭頭的字元（»、≫、⏩、》…）一個就算。直線包含 OCR 常誤認的 I、l（比對前已轉小寫）。
+     */
+    private static final String ARROW = "[>＞›►▶▸▹⯈⮞〉]";
+    private static final String DOUBLE_ARROW = "[»≫⏩⏭》]";
+    private static final String BAR = "[|｜│┃ǀ丨il]";
+    private static final Pattern SPEED_SYMBOL = Pattern.compile(
+            "^(?:(?:" + DOUBLE_ARROW + "|" + ARROW + "{2,})+" + BAR + "?"
+                    + "|" + ARROW + BAR + ")$");
+
     /** 常見廣告 SDK 關閉按鈕的 view id。 */
     private static final Pattern CLOSE_ID = Pattern.compile(
             "(^|[_:/.])(ad_?)?(close|skip|dismiss)(_?(btn|button|icon|iv|img|view|ad))?($|[_\\d])",
@@ -46,9 +58,16 @@ final class AdButtonMatcher {
         String t = normalize(raw);
         if (t.isEmpty() || t.length() > 20) return false;
         if (CLOSE_EXACT.contains(t)) return true;
+        if (isSpeedSymbol(t)) return true;
         for (String k : CONTAINS) if (t.contains(k)) return true;
         for (String k : extraKeywords) if (t.contains(k)) return true;
         return false;
+    }
+
+    /** 是否為加速 / 快轉符號（例如 »、>>、►｜）。 */
+    static boolean isSpeedSymbol(CharSequence raw) {
+        String t = normalize(raw).replace(" ", "");
+        return !t.isEmpty() && t.length() <= 6 && SPEED_SYMBOL.matcher(t).matches();
     }
 
     /** 依 view id（例如 com.foo:id/ad_close_btn）判斷。 */
@@ -61,16 +80,19 @@ final class AdButtonMatcher {
 
     /**
      * OCR 辨識出的單一「X」字元比較容易誤判，因此另外要求它夠小、位於畫面上方或角落。
+     * 加速符號只要求尺寸夠小（它可能出現在畫面任何位置）。
      */
     boolean matchesOcrText(String raw, int left, int top, int right, int bottom,
                            int screenW, int screenH) {
         String t = normalize(raw);
         if (t.isEmpty()) return false;
-        boolean singleX = t.length() == 1 && CLOSE_EXACT.contains(t);
-        if (!singleX) return matchesText(t);
         int w = right - left, h = bottom - top;
         int maxSize = Math.max(screenW, screenH) / 12;
-        if (w > maxSize || h > maxSize) return false;
+        boolean small = w <= maxSize && h <= maxSize;
+        if (isSpeedSymbol(t)) return small;
+        boolean singleX = t.length() == 1 && CLOSE_EXACT.contains(t);
+        if (!singleX) return matchesText(t);
+        if (!small) return false;
         int cx = (left + right) / 2, cy = (top + bottom) / 2;
         boolean nearTop = cy < screenH / 4;
         boolean nearBottom = cy > screenH * 3 / 4;
