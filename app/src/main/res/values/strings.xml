@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SkipAds 自動跳廣告</string>
+    <string name="service_label">SkipAds 自動跳廣告</string>
+    <string name="service_description">每秒檢查一次螢幕，自動點擊廣告上的「X」或「加速」按鈕；若有其它 App 蓋在目標 App 上，會按返回鍵直到目標 App 回到前景。</string>
+</resources>
