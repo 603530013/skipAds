@@ -15,6 +15,9 @@ final class Prefs {
     static final String KEY_OCR = "ocr_enabled";
     static final String KEY_EXTRA_KEYWORDS = "extra_keywords";
     static final String KEY_LOG = "log";
+    static final String KEY_BUBBLE = "bubble_enabled";
+    static final String KEY_BUBBLE_X = "bubble_x";
+    static final String KEY_BUBBLE_Y = "bubble_y";
 
     private static final int MAX_LOG_LINES = 30;
 
@@ -34,6 +37,10 @@ final class Prefs {
 
     static boolean isOcrEnabled(Context context) {
         return get(context).getBoolean(KEY_OCR, true);
+    }
+
+    static boolean isBubbleEnabled(Context context) {
+        return get(context).getBoolean(KEY_BUBBLE, true);
     }
 
     static String extraKeywords(Context context) {

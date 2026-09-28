@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -41,7 +42,7 @@ import java.util.concurrent.Executor;
  * 2. 其它 App 蓋在目標 App 上 → 按返回鍵，直到目標 App 回到前景；
  *    多次返回仍無效（或被退回桌面）時直接重新開啟目標 App。
  */
-public class AdSkipService extends AccessibilityService {
+public class AdSkipService extends AccessibilityService implements FloatingBubble.Host {
 
     private static final long TICK_MS = 1000;
     /** 同一個位置點過後，至少隔這麼久才再點一次，避免連點。 */
@@ -68,6 +69,15 @@ public class AdSkipService extends AccessibilityService {
     private final Rect lastClickRect = new Rect();
     private long lastClickAt = 0;
 
+    private FloatingBubble bubble;
+    private final SharedPreferences.OnSharedPreferenceChangeListener prefListener = (p, key) -> {
+        if (Prefs.KEY_BUBBLE.equals(key)) {
+            updateBubbleVisibility();
+        } else if (Prefs.KEY_ENABLED.equals(key) || Prefs.KEY_TARGET.equals(key)) {
+            if (bubble != null) bubble.refresh();
+        }
+    };
+
     private TextRecognizer recognizer;
     private boolean ocrBusy = false;
     private long lastOcrAt = 0;
@@ -77,6 +87,9 @@ public class AdSkipService extends AccessibilityService {
         super.onServiceConnected();
         refreshSystemPackages();
         Prefs.log(this, "無障礙服務已啟動");
+        bubble = new FloatingBubble(this, this);
+        Prefs.get(this).registerOnSharedPreferenceChangeListener(prefListener);
+        updateBubbleVisibility();
         handler.removeCallbacks(tick);
         handler.postDelayed(tick, TICK_MS);
     }
@@ -92,8 +105,47 @@ public class AdSkipService extends AccessibilityService {
     @Override
     public void onDestroy() {
         handler.removeCallbacks(tick);
+        Prefs.get(this).unregisterOnSharedPreferenceChangeListener(prefListener);
+        if (bubble != null) bubble.hide();
         if (recognizer != null) recognizer.close();
         super.onDestroy();
+    }
+
+    private void updateBubbleVisibility() {
+        if (bubble == null) return;
+        try {
+            if (Prefs.isBubbleEnabled(this)) {
+                bubble.show();
+            } else {
+                bubble.hide();
+            }
+        } catch (RuntimeException e) {
+            Prefs.log(this, "無法顯示浮球：" + e.getMessage());
+        }
+    }
+
+    // ---------------------------------------------------------------- 浮球 Host
+
+    @Override
+    public String currentForegroundApp() {
+        AccessibilityNodeInfo root = findForegroundAppRoot();
+        if (root == null || root.getPackageName() == null) return null;
+        String pkg = root.getPackageName().toString();
+        if (pkg.equals(getPackageName()) || launcherPackages.contains(pkg)
+                || imePackages.contains(pkg) || pkg.equals("com.android.systemui")) {
+            return null;
+        }
+        return pkg;
+    }
+
+    @Override
+    public void onTargetChosen(String pkg) {
+        Prefs.get(this).edit().putString(Prefs.KEY_TARGET, pkg).apply();
+        // 目標 App 此刻就在前景，直接開始追蹤。
+        armed = true;
+        backCount = 0;
+        relaunchCount = 0;
+        Prefs.log(this, "由浮球設定目標 App：" + pkg);
     }
 
     private void onTick() {
@@ -273,6 +325,7 @@ public class AdSkipService extends AccessibilityService {
     }
 
     private boolean tap(int x, int y) {
+        if (bubble != null) bubble.letTouchPassAt(x, y);
         Path path = new Path();
         path.moveTo(x, y);
         GestureDescription gesture = new GestureDescription.Builder()

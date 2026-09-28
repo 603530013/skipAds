@@ -59,6 +59,11 @@ public class MainActivity extends Activity {
         ocr.setOnCheckedChangeListener((b, checked) ->
                 prefs.edit().putBoolean(Prefs.KEY_OCR, checked).apply());
 
+        Switch bubbleSwitch = findViewById(R.id.bubble_switch);
+        bubbleSwitch.setChecked(Prefs.isBubbleEnabled(this));
+        bubbleSwitch.setOnCheckedChangeListener((b, checked) ->
+                prefs.edit().putBoolean(Prefs.KEY_BUBBLE, checked).apply());
+
         EditText keywords = findViewById(R.id.extra_keywords);
         keywords.setText(Prefs.extraKeywords(this));
         findViewById(R.id.save_keywords).setOnClickListener(v -> {
